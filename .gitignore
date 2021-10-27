@@ -2,3 +2,5 @@ platformio/.pio
 *.FCStd1
 *.FCStd2
 *.FCStd3
+*stl
+.DS_Store
