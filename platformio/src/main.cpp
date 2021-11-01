@@ -16,11 +16,6 @@ CayenneLPP lpp(51);
 #define BATTERY_RECHARGABLE 1
 #define HAS_RGB 1
 
-#define SLEEP_INTERVAL 60*1000*4 // 4 Minutes
-#define MAX_CYCLE SLEEP_INTERVAL
-#define MIN_CYCLE 10
-#define MAX_VOLTAGE 4100
-#define MIN_VOLTAGE 3700
 #define MEASUREMENT_INTERVAL 60*1000 // 1 Minutes
 #define LOGLEVEL LOG_LEVEL_VERBOSE
 // #define LOGLEVEL LOG_LEVEL_SILENT
@@ -38,7 +33,7 @@ uint32_t sleep_interval = SLEEP_INTERVAL,
 #define S_WAIT 4
 
 uint8_t state = S_STARTING, prev_reading = 0;
-#define MEASUREMENT_PIN GPIO1
+#define INT_PIN USER_KEY
 
 // #define LOGLEVEL LOG_LEVEL_VERBOSE
 
@@ -53,6 +48,7 @@ bool setup_complete = false;
 bool pixels_initalized = false;
 bool drain_battery = false;
 bool voltage_found = true;
+bool accelWoke = false;
 
 
 uint16_t userChannelsMask[6]={ 0x00FF,0x0000,0x0000,0x0000,0x0000,0x0000 };
@@ -161,26 +157,6 @@ void read_voltage() {
   uint16_t v = getBatteryVoltage();
   lpp.addAnalogInput(5,(float)v / 1000.0);
   Log.verbose(F("Voltage: %d"),v);
-
-  long int cycle =
-  (
-    (
-      (long)MIN_CYCLE - (long)MAX_CYCLE
-    )
-      / ((long)MAX_VOLTAGE-(long)MIN_VOLTAGE)
-  ) *
-  (v - (long)MIN_VOLTAGE) +
-  (long)MAX_CYCLE;
-
-  if (cycle < MIN_CYCLE)
-    cycle = MIN_CYCLE;
-  if (cycle > MAX_CYCLE)
-    cycle = MAX_CYCLE;
-  if (variableDutyCycle) {
-    sleep_interval = cycle;
-    appTxDutyCycle = cycle;
-  }
-
 }
 
 // Sensor routines
@@ -195,10 +171,6 @@ void read_sensors() {
 
   if (voltage_found) {
     read_voltage();
-  }
-  if (state == S_COMPLETE) {
-    lpp.addLuminosity(9,measurement_counter);
-    Log.verbose(F("Wind = %d"), measurement_counter);
   }
 
 }
@@ -251,11 +223,17 @@ void setup_chipid() {
 }
 
 void set_default_timers() {
-  sleep_interval = SLEEP_INTERVAL;
-  appTxDutyCycle = SLEEP_INTERVAL;
-  measurement_interval = MEASUREMENT_INTERVAL;
-  variableDutyCycle = true;
 }
+
+void accelWakeup()
+{
+  delay(10);
+  if(digitalRead(INT_PIN)==HIGH)
+  {
+    accelWoke = true;
+  }
+}
+
 
 void setup() {
   // Turn on watchdog
@@ -275,7 +253,10 @@ void setup() {
 
   setup_lora();
 
-  pinMode(MEASUREMENT_PIN,INPUT_PULLUP);
+  accelWoke = false;
+  pinMode(INT_PIN,INPUT);
+  attachInterrupt(INT_PIN, accelWakeup, RISING);
+
 }
 
 static void prepareTxFrame( ) {
